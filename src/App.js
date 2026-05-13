@@ -1,6 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { supabase } from './supabase'
 
+const SUPABASE_URL = 'https://tbzjxcdaxmvgjjlukncw.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRiemp4Y2RheG12Z2pqbHVrbmN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1ODE3MjksImV4cCI6MjA5NDE1NzcyOX0.27Jj18oqizAa3Hq24dh5Qxh5imy1ceUJQg-oSLzeA-I'
+
+const H = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json',
+  'Accept': 'application/json',
+  'Prefer': 'return=representation'
+}
+
+async function dbGet(table, query = '') {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { method: 'GET', headers: H })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+async function dbPost(table, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: 'POST', headers: H, body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(await res.text())
+  const text = await res.text()
+  return text ? JSON.parse(text) : []
+}
+
+async function dbPatch(table, query, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { method: 'PATCH', headers: H, body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(await res.text())
+  return true
+}
+
+// Configurações da quadra
 const OPEN_H = 7, CLOSE_H = 22, SLOT_MIN = 90
 const SLOTS = []
 for (let m = OPEN_H * 60; m + SLOT_MIN <= CLOSE_H * 60; m += 30) SLOTS.push(m)
@@ -14,33 +44,20 @@ const addDays = (dateStr, d) => {
   dt.setDate(dt.getDate() + d)
   return dt.toISOString().slice(0, 10)
 }
+const sanitizeUsername = str => str.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_]/g, '')
 
 const css = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #f5f4f0;
-    --surface: #ffffff;
-    --border: #e2e0d8;
-    --text: #1a1916;
-    --muted: #6b6960;
-    --hint: #a09d94;
-    --green: #2d6a4f;
-    --green-bg: #d8f3dc;
-    --red: #9b2226;
-    --red-bg: #fde8e8;
-    --blue: #1d4e89;
-    --blue-bg: #dbeafe;
-    --amber: #92400e;
-    --amber-bg: #fef3c7;
-    --radius: 10px;
-    --radius-sm: 6px;
+    --bg: #f5f4f0; --surface: #ffffff; --border: #e2e0d8;
+    --text: #1a1916; --muted: #6b6960; --hint: #a09d94;
+    --green: #2d6a4f; --green-bg: #d8f3dc;
+    --red: #9b2226; --red-bg: #fde8e8;
+    --blue: #1d4e89; --blue-bg: #dbeafe;
+    --amber: #92400e; --amber-bg: #fef3c7;
+    --radius: 10px; --radius-sm: 6px;
   }
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
   .app { max-width: 520px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
   .logo { text-align: center; margin-bottom: 2rem; }
   .logo h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
@@ -51,9 +68,11 @@ const css = `
   input, select { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: inherit; font-size: 14px; color: var(--text); background: var(--bg); margin-bottom: .75rem; outline: none; transition: border-color .15s; }
   input:focus, select:focus { border-color: var(--text); }
   input[type=date] { width: auto; }
+  .input-hint { font-size: 11px; color: var(--hint); margin-top: -10px; margin-bottom: .75rem; }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; }
   .btn:hover { background: var(--bg); }
   .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
   .btn-primary { background: var(--text); color: var(--surface); border-color: var(--text); }
   .btn-primary:hover { opacity: .85; background: var(--text); }
   .btn-danger { background: var(--red-bg); color: var(--red); border-color: transparent; }
@@ -69,22 +88,18 @@ const css = `
   .alert-ok { background: var(--green-bg); color: var(--green); }
   .alert-warn { background: var(--amber-bg); color: var(--amber); }
   .nav { display: flex; gap: .375rem; margin-bottom: 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .375rem; }
-  .nav-btn { flex: 1; padding: 7px 8px; border: none; border-radius: var(--radius-sm); background: transparent; font-family: inherit; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all .15s; }
+  .nav-btn { flex: 1; padding: 7px 4px; border: none; border-radius: var(--radius-sm); background: transparent; font-family: inherit; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all .15s; }
   .nav-btn.active { background: var(--text); color: var(--surface); }
   .user-bar { display: flex; align-items: center; justify-content: space-between; padding: .75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; }
   .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--blue-bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--blue); flex-shrink: 0; }
   .slot-row { display: flex; align-items: center; gap: .75rem; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: .5rem; background: var(--surface); flex-wrap: wrap; }
-  .slot-time { font-size: 15px; font-weight: 600; min-width: 52px; font-family: 'DM Mono', monospace; }
+  .slot-time { font-size: 15px; font-weight: 600; min-width: 52px; font-family: monospace; }
   .slot-info { flex: 1; font-size: 13px; color: var(--muted); }
-  .sep { height: 1px; background: var(--border); margin: 1rem 0; }
   .daterow { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .daterow label { margin: 0; }
   .row { display: flex; gap: .5rem; margin-bottom: .75rem; }
-  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--text); border-radius: 50%; animation: spin .6s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .sep { height: 1px; background: var(--border); margin: 1rem 0; }
   .center { text-align: center; padding: 2rem 0; color: var(--muted); font-size: 13px; }
-  a { color: var(--blue); text-decoration: none; }
-  a:hover { text-decoration: underline; }
   .link-btn { background: none; border: none; color: var(--blue); font-family: inherit; font-size: 13px; cursor: pointer; padding: 0; }
   .link-btn:hover { text-decoration: underline; }
   @media (max-width: 480px) { .app { padding: 1rem .75rem 4rem; } }
@@ -95,12 +110,8 @@ function Alert({ msg, type }) {
   return <div className={`alert alert-${type}`}>{msg}</div>
 }
 
-function Spinner() {
-  return <span className="spinner" aria-label="Carregando" />
-}
-
 export default function App() {
-  const [screen, setScreen] = useState('login') // login | main | view
+  const [screen, setScreen] = useState('login')
   const [tab, setTab] = useState('agenda')
   const [currentUser, setCurrentUser] = useState(null)
   const [users, setUsers] = useState([])
@@ -108,15 +119,19 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState({ text: '', type: 'err' })
 
-  // Form states
-  const [loginName, setLoginName] = useState('')
+  // Login
+  const [loginUsername, setLoginUsername] = useState('')
   const [loginPin, setLoginPin] = useState('')
+
+  // Cadastro
   const [regName, setRegName] = useState('')
+  const [regUsername, setRegUsername] = useState('')
   const [regPhone, setRegPhone] = useState('')
   const [regPin, setRegPin] = useState('')
   const [regPin2, setRegPin2] = useState('')
   const [showReg, setShowReg] = useState(false)
 
+  // Agenda / Agendamento
   const [viewDate, setViewDate] = useState(todayStr())
   const [novoDate, setNovoDate] = useState(todayStr())
   const [novoSlot, setNovoSlot] = useState('')
@@ -124,19 +139,30 @@ export default function App() {
 
   const showMsg = (text, type = 'err') => {
     setMsg({ text, type })
-    setTimeout(() => setMsg({ text: '', type: 'err' }), 3500)
+    setTimeout(() => setMsg({ text: '', type: 'err' }), 4000)
   }
 
   const loadData = useCallback(async () => {
-    const [{ data: u }, { data: b }] = await Promise.all([
-      supabase.from('users').select('*').order('name'),
-      supabase.from('bookings').select('*').eq('cancelled', false)
-    ])
-    if (u) setUsers(u)
-    if (b) setBookings(b)
+    try {
+      const [u, b] = await Promise.all([
+        dbGet('users', 'select=*&order=name.asc'),
+        dbGet('bookings', 'select=*&cancelled=eq.false')
+      ])
+      setUsers(Array.isArray(u) ? u : [])
+      setBookings(Array.isArray(b) ? b : [])
+    } catch (e) {
+      console.error('loadData:', e.message)
+    }
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Auto-preenche username ao digitar nome completo
+  useEffect(() => {
+    if (regName && !regUsername) {
+      setRegUsername(sanitizeUsername(regName))
+    }
+  }, [regName])
 
   const getActiveBooking = (userId) => {
     if (!userId) return null
@@ -150,95 +176,113 @@ export default function App() {
     })
   }
 
-  const isSlotAvailable = (dateStr, slotMin) => {
-    return !bookings.some(bk => bk.date === dateStr && Math.abs(bk.slot - slotMin) < SLOT_MIN)
-  }
+  const isSlotAvailable = (dateStr, slotMin) =>
+    !bookings.some(bk => bk.date === dateStr && Math.abs(bk.slot - slotMin) < SLOT_MIN)
 
   const getSlotBooking = (dateStr, slotMin) =>
     bookings.find(bk => bk.date === dateStr && bk.slot === slotMin) || null
 
-  // Auth
+  // ── CADASTRO ──────────────────────────────────────────
   const doRegister = async () => {
-    if (!regName || !regPhone || !regPin) return showMsg('Preencha todos os campos.')
-    if (!/^\d{4}$/.test(regPin)) return showMsg('PIN deve ter 4 números.')
+    if (!regName || !regUsername || !regPhone || !regPin) return showMsg('Preencha todos os campos.')
+    if (!/^\d{4}$/.test(regPin)) return showMsg('PIN deve ter exatamente 4 números.')
     if (regPin !== regPin2) return showMsg('PINs não conferem.')
     const phone = regPhone.replace(/\D/g, '')
-    if (phone.length < 10) return showMsg('Telefone inválido.')
-    const exists = users.find(u => u.name.toLowerCase() === regName.trim().toLowerCase())
-    if (exists) return showMsg('Nome já cadastrado.')
+    if (phone.length < 10) return showMsg('Telefone inválido. Inclua o DDD.')
+    const uname = sanitizeUsername(regUsername)
+    if (!uname || uname.length < 3) return showMsg('Username deve ter ao menos 3 caracteres (letras e números).')
+    const existsUsername = users.find(u => u.username === uname)
+    if (existsUsername) return showMsg('Username já em uso. Escolha outro.')
     setLoading(true)
-    const { error } = await supabase.from('users').insert({ name: regName.trim(), phone, pin: regPin })
+    try {
+      await dbPost('users', { name: regName.trim(), username: uname, phone, pin: regPin })
+      await loadData()
+      showMsg('Cadastrado com sucesso! Faça login.', 'ok')
+      setShowReg(false)
+      setRegName(''); setRegUsername(''); setRegPhone(''); setRegPin(''); setRegPin2('')
+    } catch (e) {
+      showMsg('Erro ao cadastrar: ' + e.message)
+    }
     setLoading(false)
-    if (error) return showMsg('Erro ao cadastrar. Tente novamente.')
-    await loadData()
-    showMsg('Cadastrado com sucesso! Faça login.', 'ok')
-    setShowReg(false)
-    setRegName(''); setRegPhone(''); setRegPin(''); setRegPin2('')
   }
 
+  // ── LOGIN ──────────────────────────────────────────────
   const doLogin = async () => {
-    const user = users.find(u => u.name.toLowerCase() === loginName.trim().toLowerCase())
+    const uname = sanitizeUsername(loginUsername)
+    const user = users.find(u => u.username === uname)
     if (!user) return showMsg('Usuário não encontrado.')
     if (user.pin !== loginPin) return showMsg('PIN incorreto.')
     setCurrentUser(user)
     setScreen('main')
     setTab('agenda')
     setViewDate(todayStr())
-    setLoginName(''); setLoginPin('')
+    setLoginUsername(''); setLoginPin('')
   }
 
   const doLogout = () => { setCurrentUser(null); setScreen('login') }
 
-  // Booking
+  // ── AGENDAR ────────────────────────────────────────────
   const doBook = async () => {
-    if (!novoDate || !novoSlot || !novoOponent) return showMsg('Preencha todos os campos.', 'err')
-    if (getActiveBooking(currentUser?.id)) return showMsg('Você já tem um jogo agendado.', 'err')
+    if (!novoDate || !novoSlot || !novoOponent) return showMsg('Preencha todos os campos.')
+    if (getActiveBooking(currentUser?.id)) return showMsg('Você já tem um jogo agendado.')
     const oponentUser = users.find(u => u.id === novoOponent)
-    if (getActiveBooking(novoOponent)) return showMsg(`${oponentUser?.name} já tem jogo agendado.`, 'err')
-    if (!isSlotAvailable(novoDate, parseInt(novoSlot))) return showMsg('Horário não disponível.', 'err')
+    if (getActiveBooking(novoOponent)) return showMsg(`${oponentUser?.name} já tem jogo agendado.`)
+    if (!isSlotAvailable(novoDate, parseInt(novoSlot))) return showMsg('Horário não disponível.')
     setLoading(true)
-    const { error } = await supabase.from('bookings').insert({
-      date: novoDate, slot: parseInt(novoSlot),
-      player1_id: currentUser.id, player2_id: novoOponent, cancelled: false
-    })
+    try {
+      await dbPost('bookings', {
+        date: novoDate, slot: parseInt(novoSlot),
+        player1_id: currentUser.id, player2_id: novoOponent, cancelled: false
+      })
+      await loadData()
+      showMsg('Agendamento confirmado!', 'ok')
+      const waMsg = encodeURIComponent(`Olá ${oponentUser?.name}! ${currentUser.name} te desafiou para um jogo de tênis em ${novoDate} às ${minToStr(parseInt(novoSlot))}. Confirme sua presença! 🎾`)
+      setTimeout(() => {
+        if (window.confirm(`Notificar ${oponentUser?.name} pelo WhatsApp?`))
+          window.open(`https://wa.me/55${oponentUser?.phone}?text=${waMsg}`, '_blank')
+      }, 400)
+      setNovoSlot(''); setNovoOponent('')
+    } catch (e) {
+      showMsg('Erro ao agendar: ' + e.message)
+    }
     setLoading(false)
-    if (error) return showMsg('Erro ao agendar.', 'err')
-    await loadData()
-    showMsg('Agendamento confirmado!', 'ok')
-    const msg = encodeURIComponent(`Olá ${oponentUser?.name}! ${currentUser.name} te desafiou para um jogo de tênis em ${novoDate} às ${minToStr(parseInt(novoSlot))}. Confirme sua presença! 🎾`)
-    const waLink = `https://wa.me/55${oponentUser?.phone}?text=${msg}`
-    setTimeout(() => { if (window.confirm(`Notificar ${oponentUser?.name} pelo WhatsApp?`)) window.open(waLink, '_blank') }, 400)
-    setNovoSlot(''); setNovoOponent('')
   }
 
+  // ── CANCELAR ───────────────────────────────────────────
   const doCancel = async (id) => {
     if (!window.confirm('Cancelar este agendamento?')) return
     setLoading(true)
-    await supabase.from('bookings').update({ cancelled: true }).eq('id', id)
-    await loadData()
+    try {
+      await dbPatch('bookings', `id=eq.${id}`, { cancelled: true })
+      await loadData()
+    } catch (e) { showMsg('Erro ao cancelar.') }
     setLoading(false)
   }
 
+  // ── EDITAR ─────────────────────────────────────────────
   const doEdit = async (bk) => {
     const newDate = window.prompt('Nova data (AAAA-MM-DD):', bk.date)
     if (!newDate) return
-    const timeStr = window.prompt('Novo horário (ex: 15:00):', minToStr(bk.slot))
+    const timeStr = window.prompt(`Novo horário (ex: 15:00)\nHorários válidos: 07:00 até 21:00 em intervalos de 30min`, minToStr(bk.slot))
     if (!timeStr) return
     const [hh, mm] = timeStr.split(':').map(Number)
     const newSlot = hh * 60 + (mm || 0)
-    if (!SLOTS.includes(newSlot)) return window.alert('Horário inválido. Use múltiplos de 30 min entre 07:00 e 21:00.')
+    if (!SLOTS.includes(newSlot)) return window.alert('Horário inválido. Use intervalos de 30 minutos entre 07:00 e 21:00.')
     const conflict = bookings.some(b => b.id !== bk.id && b.date === newDate && Math.abs(b.slot - newSlot) < SLOT_MIN)
-    if (conflict) return window.alert('Horário não disponível (conflito com outro jogo).')
+    if (conflict) return window.alert('Horário não disponível. Conflito com outro jogo.')
     setLoading(true)
-    await supabase.from('bookings').update({ date: newDate, slot: newSlot }).eq('id', bk.id)
-    await loadData()
+    try {
+      await dbPatch('bookings', `id=eq.${bk.id}`, { date: newDate, slot: newSlot })
+      await loadData()
+      const p2 = users.find(u => u.id === bk.player2_id)
+      const waMsg = encodeURIComponent(`Olá ${p2?.name}! ${currentUser.name} alterou o jogo para ${newDate} às ${minToStr(newSlot)}. 🎾`)
+      if (window.confirm(`Notificar ${p2?.name} sobre a alteração pelo WhatsApp?`))
+        window.open(`https://wa.me/55${p2?.phone}?text=${waMsg}`, '_blank')
+    } catch (e) { showMsg('Erro ao alterar.') }
     setLoading(false)
-    const p2 = users.find(u => u.id === bk.player2_id)
-    const waMsg = encodeURIComponent(`Olá ${p2?.name}! ${currentUser.name} alterou o jogo para ${newDate} às ${minToStr(newSlot)}. 🎾`)
-    if (window.confirm(`Notificar ${p2?.name} sobre a alteração pelo WhatsApp?`)) window.open(`https://wa.me/55${p2?.phone}?text=${waMsg}`, '_blank')
   }
 
-  // Render slots
+  // ── RENDER SLOTS ───────────────────────────────────────
   const renderSlots = (dateStr, isMain) => {
     const now = new Date()
     return SLOTS.map(slotMin => {
@@ -249,7 +293,6 @@ export default function App() {
       const isMine = isMain && bk && (bk.player1_id === currentUser?.id || bk.player2_id === currentUser?.id)
       const p1 = bk ? users.find(u => u.id === bk.player1_id)?.name : null
       const p2 = bk ? users.find(u => u.id === bk.player2_id)?.name : null
-
       return (
         <div className="slot-row" key={slotMin}>
           <span className="slot-time">{minToStr(slotMin)}</span>
@@ -265,16 +308,15 @@ export default function App() {
 
   const myBookings = bookings.filter(b => currentUser && (b.player1_id === currentUser.id || b.player2_id === currentUser.id))
   const activeBooking = getActiveBooking(currentUser?.id)
-
   const availableSlots = SLOTS.filter(s => {
     const now = new Date()
     const [y, mo, d] = novoDate.split('-').map(Number)
     const slotDate = new Date(y, mo - 1, d, Math.floor(s / 60), s % 60)
     return slotDate > now && isSlotAvailable(novoDate, s)
   })
-
   const availableOpponents = users.filter(u => u.id !== currentUser?.id && !getActiveBooking(u.id))
 
+  // ── RENDER ─────────────────────────────────────────────
   return (
     <>
       <style>{css}</style>
@@ -284,41 +326,91 @@ export default function App() {
           <p>Sistema de agendamento</p>
         </div>
 
-        {/* LOGIN */}
+        {/* ── TELA LOGIN ── */}
         {screen === 'login' && (
           <div className="card">
             <Alert msg={msg.text} type={msg.type} />
             {!showReg ? (
               <>
                 <p className="card-title">Entrar</p>
-                <label>Nome</label>
-                <input value={loginName} onChange={e => setLoginName(e.target.value)} placeholder="Ex: João Silva" onKeyDown={e => e.key === 'Enter' && doLogin()} />
+                <label>Username</label>
+                <input
+                  value={loginUsername}
+                  onChange={e => setLoginUsername(e.target.value)}
+                  placeholder="Ex: joaosilva"
+                  autoCapitalize="none"
+                  onKeyDown={e => e.key === 'Enter' && doLogin()}
+                />
                 <label>PIN de 4 dígitos</label>
-                <input type="password" maxLength={4} value={loginPin} onChange={e => setLoginPin(e.target.value)} placeholder="••••" inputMode="numeric" onKeyDown={e => e.key === 'Enter' && doLogin()} />
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={loginPin}
+                  onChange={e => setLoginPin(e.target.value)}
+                  placeholder="••••"
+                  inputMode="numeric"
+                  onKeyDown={e => e.key === 'Enter' && doLogin()}
+                />
                 <div className="row">
                   <button className="btn btn-primary" style={{ flex: 1 }} onClick={doLogin} disabled={loading}>
-                    {loading ? <Spinner /> : 'Entrar'}
+                    {loading ? '...' : 'Entrar'}
                   </button>
                   <button className="btn" style={{ flex: 1 }} onClick={() => setShowReg(true)}>Cadastrar</button>
                 </div>
                 <p style={{ textAlign: 'center', marginTop: '.75rem', fontSize: 13, color: 'var(--muted)' }}>
-                  <button className="link-btn" onClick={() => setScreen('view')}>Ver agenda sem login →</button>
+                  <button className="link-btn" onClick={() => { setScreen('view'); setViewDate(todayStr()) }}>
+                    Ver agenda sem login →
+                  </button>
                 </p>
               </>
             ) : (
               <>
                 <p className="card-title">Novo cadastro</p>
                 <label>Nome completo</label>
-                <input value={regName} onChange={e => setRegName(e.target.value)} placeholder="Ex: João Silva" />
+                <input
+                  value={regName}
+                  onChange={e => {
+                    setRegName(e.target.value)
+                    setRegUsername(sanitizeUsername(e.target.value))
+                  }}
+                  placeholder="Ex: João Silva"
+                />
+                <label>Username (para login)</label>
+                <input
+                  value={regUsername}
+                  onChange={e => setRegUsername(sanitizeUsername(e.target.value))}
+                  placeholder="Ex: joaosilva"
+                  autoCapitalize="none"
+                />
+                <p className="input-hint">Apenas letras minúsculas e números, sem espaços.</p>
                 <label>Telefone WhatsApp (com DDD)</label>
-                <input value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="11999999999" inputMode="numeric" />
+                <input
+                  value={regPhone}
+                  onChange={e => setRegPhone(e.target.value)}
+                  placeholder="11999999999"
+                  inputMode="numeric"
+                />
                 <label>PIN de 4 dígitos</label>
-                <input type="password" maxLength={4} value={regPin} onChange={e => setRegPin(e.target.value)} placeholder="••••" inputMode="numeric" />
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={regPin}
+                  onChange={e => setRegPin(e.target.value)}
+                  placeholder="••••"
+                  inputMode="numeric"
+                />
                 <label>Confirmar PIN</label>
-                <input type="password" maxLength={4} value={regPin2} onChange={e => setRegPin2(e.target.value)} placeholder="••••" inputMode="numeric" />
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={regPin2}
+                  onChange={e => setRegPin2(e.target.value)}
+                  placeholder="••••"
+                  inputMode="numeric"
+                />
                 <div className="row">
                   <button className="btn btn-success" style={{ flex: 1 }} onClick={doRegister} disabled={loading}>
-                    {loading ? <Spinner /> : 'Cadastrar'}
+                    {loading ? '...' : 'Cadastrar'}
                   </button>
                   <button className="btn" onClick={() => setShowReg(false)}>Cancelar</button>
                 </div>
@@ -327,7 +419,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW ONLY */}
+        {/* ── TELA VIEW ONLY ── */}
         {screen === 'view' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '1rem' }}>
@@ -344,7 +436,7 @@ export default function App() {
           </>
         )}
 
-        {/* MAIN */}
+        {/* ── TELA PRINCIPAL ── */}
         {screen === 'main' && currentUser && (
           <>
             <div className="user-bar">
@@ -353,7 +445,7 @@ export default function App() {
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{currentUser.name}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {activeBooking ? `Jogo: ${activeBooking.date} ${minToStr(activeBooking.slot)}` : 'Sem jogo agendado'}
+                    @{currentUser.username} · {activeBooking ? `Jogo: ${activeBooking.date} ${minToStr(activeBooking.slot)}` : 'Sem jogo agendado'}
                   </div>
                 </div>
               </div>
@@ -362,7 +454,9 @@ export default function App() {
 
             <nav className="nav">
               {[['agenda', '📅 Agenda'], ['novo', '➕ Marcar jogo'], ['meus', '📋 Meus jogos']].map(([id, label]) => (
-                <button key={id} className={`nav-btn ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>{label}</button>
+                <button key={id} className={`nav-btn ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
+                  {label}
+                </button>
               ))}
             </nav>
 
@@ -381,7 +475,7 @@ export default function App() {
               </>
             )}
 
-            {/* TAB NOVO */}
+            {/* TAB NOVO AGENDAMENTO */}
             {tab === 'novo' && (
               <div className="card">
                 <p className="card-title">Novo agendamento</p>
@@ -391,7 +485,13 @@ export default function App() {
                   </div>
                 )}
                 <label>Data</label>
-                <input type="date" value={novoDate} onChange={e => setNovoDate(e.target.value)} disabled={!!activeBooking} min={todayStr()} />
+                <input
+                  type="date"
+                  value={novoDate}
+                  onChange={e => setNovoDate(e.target.value)}
+                  disabled={!!activeBooking}
+                  min={todayStr()}
+                />
                 <label>Horário disponível</label>
                 <select value={novoSlot} onChange={e => setNovoSlot(e.target.value)} disabled={!!activeBooking}>
                   <option value="">— selecione —</option>
@@ -400,48 +500,58 @@ export default function App() {
                 <label>Adversário</label>
                 <select value={novoOponent} onChange={e => setNovoOponent(e.target.value)} disabled={!!activeBooking}>
                   <option value="">— selecione —</option>
-                  {availableOpponents.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  {availableOpponents.map(u => (
+                    <option key={u.id} value={u.id}>{u.name} (@{u.username})</option>
+                  ))}
                 </select>
-                <button className="btn btn-primary btn-full" onClick={doBook} disabled={!!activeBooking || loading}>
-                  {loading ? <Spinner /> : '✅ Confirmar agendamento'}
+                <button
+                  className="btn btn-primary btn-full"
+                  onClick={doBook}
+                  disabled={!!activeBooking || loading}
+                >
+                  {loading ? '...' : '✅ Confirmar agendamento'}
                 </button>
               </div>
             )}
 
-            {/* TAB MEUS */}
+            {/* TAB MEUS JOGOS */}
             {tab === 'meus' && (
               <>
                 <p style={{ fontSize: 15, fontWeight: 600, marginBottom: '.75rem' }}>Meus agendamentos</p>
                 {myBookings.length === 0 && <div className="center">Nenhum jogo agendado.</div>}
-                {myBookings.sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot).map(bk => {
-                  const now = new Date()
-                  const [y, mo, d] = bk.date.split('-').map(Number)
-                  const endH = Math.floor((bk.slot + SLOT_MIN) / 60)
-                  const endMn = (bk.slot + SLOT_MIN) % 60
-                  const isPast = new Date(y, mo - 1, d, endH, endMn) < now
-                  const isOwner = bk.player1_id === currentUser.id
-                  const p1 = users.find(u => u.id === bk.player1_id)?.name || '?'
-                  const p2 = users.find(u => u.id === bk.player2_id)?.name || '?'
-                  return (
-                    <div className="card" key={bk.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '.5rem' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 15 }}>{p1} vs {p2}</div>
-                          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-                            {bk.date} · {minToStr(bk.slot)} – {minToStr(bk.slot + SLOT_MIN)}
+                {myBookings
+                  .sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot)
+                  .map(bk => {
+                    const now = new Date()
+                    const [y, mo, d] = bk.date.split('-').map(Number)
+                    const endH = Math.floor((bk.slot + SLOT_MIN) / 60)
+                    const endMn = (bk.slot + SLOT_MIN) % 60
+                    const isPast = new Date(y, mo - 1, d, endH, endMn) < now
+                    const isOwner = bk.player1_id === currentUser.id
+                    const p1 = users.find(u => u.id === bk.player1_id)?.name || '?'
+                    const p2 = users.find(u => u.id === bk.player2_id)?.name || '?'
+                    return (
+                      <div className="card" key={bk.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '.5rem' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 15 }}>{p1} vs {p2}</div>
+                            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+                              {bk.date} · {minToStr(bk.slot)} – {minToStr(bk.slot + SLOT_MIN)}
+                            </div>
                           </div>
+                          <span className={`badge ${isPast ? 'badge-past' : 'badge-mine'}`}>
+                            {isPast ? 'Concluído' : 'Confirmado'}
+                          </span>
                         </div>
-                        <span className={`badge ${isPast ? 'badge-past' : 'badge-mine'}`}>{isPast ? 'Concluído' : 'Confirmado'}</span>
+                        {isOwner && !isPast && (
+                          <div style={{ display: 'flex', gap: '.5rem', marginTop: '.75rem', flexWrap: 'wrap' }}>
+                            <button className="btn" onClick={() => doEdit(bk)} disabled={loading}>✏️ Alterar</button>
+                            <button className="btn btn-danger" onClick={() => doCancel(bk.id)} disabled={loading}>🗑 Cancelar</button>
+                          </div>
+                        )}
                       </div>
-                      {isOwner && !isPast && (
-                        <div style={{ display: 'flex', gap: '.5rem', marginTop: '.75rem', flexWrap: 'wrap' }}>
-                          <button className="btn" onClick={() => doEdit(bk)} disabled={loading}>✏️ Alterar</button>
-                          <button className="btn btn-danger" onClick={() => doCancel(bk.id)} disabled={loading}>🗑 Cancelar</button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                    )
+                  })}
               </>
             )}
           </>
