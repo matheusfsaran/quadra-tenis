@@ -151,7 +151,7 @@ export default function App() {
         dbGet('bookings', 'select=*&cancelled=eq.false')
       ])
       setUsers(Array.isArray(u) ? u : [])
-      setBookings(Array.isArray(b) ? b : [])
+      setBookings(Array.isArray(b) ? b.map(bk => ({ ...bk, slot: parseInt(bk.slot) })) : [])
     } catch (e) {
       console.error('loadData:', e.message)
     }
