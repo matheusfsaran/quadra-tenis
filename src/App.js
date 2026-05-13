@@ -8,7 +8,9 @@ const H = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
   'Content-Type': 'application/json',
   'Accept': 'application/json',
-  'Prefer': 'return=representation'
+  'Prefer': 'return=representation',
+  'Accept-Profile': 'public',
+  'Content-Profile': 'public'
 }
 
 async function dbGet(table, query = '') {
