@@ -179,10 +179,10 @@ export default function App() {
   }
 
   const isSlotAvailable = (dateStr, slotMin) =>
-    !bookings.some(bk => bk.date === dateStr && Math.abs(bk.slot - slotMin) < SLOT_MIN)
+  !bookings.some(bk => bk.date === dateStr && Math.abs(parseInt(bk.slot) - parseInt(slotMin)) < SLOT_MIN)
 
   const getSlotBooking = (dateStr, slotMin) =>
-    bookings.find(bk => bk.date === dateStr && bk.slot === slotMin) || null
+  bookings.find(bk => bk.date === dateStr && parseInt(bk.slot) === parseInt(slotMin)) || null
 
   // ── CADASTRO ──────────────────────────────────────────
   const doRegister = async () => {
