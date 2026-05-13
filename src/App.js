@@ -325,7 +325,7 @@ export default function App() {
       <style>{css}</style>
       <div className="app">
         <div className="logo">
-          <h1>🎾 Quadra de Tênis</h1>
+          <h1>🎾 Barragem CMP</h1>
           <p>Sistema de agendamento</p>
         </div>
 
