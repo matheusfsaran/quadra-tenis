@@ -238,7 +238,7 @@ export default function App() {
       })
       await loadData()
       showMsg('Agendamento confirmado!', 'ok')
-      const waMsg = encodeURIComponent(`Olá ${oponentUser?.name}! ${currentUser.name} te desafiou para um jogo de tênis em ${novoDate} às ${minToStr(parseInt(novoSlot))}. Confirme sua presença! 🎾`)
+      const waMsg = encodeURIComponent(`Olá ${oponentUser?.name}! ${currentUser.name} agendou seu jogo pela Barragem CMP para ${novoDate} às ${minToStr(parseInt(novoSlot))}. 🎾`)
       setTimeout(() => {
         if (window.confirm(`Notificar ${oponentUser?.name} pelo WhatsApp?`))
           window.open(`https://wa.me/55${oponentUser?.phone}?text=${waMsg}`, '_blank')
