@@ -302,7 +302,8 @@ export default function App() {
           {bk && isMine && <span className="badge badge-mine">Meu jogo</span>}
           {bk && !isMine && <span className="badge badge-busy">Ocupado</span>}
           {!bk && isPast && <span className="badge badge-past">Passado</span>}
-          {!bk && !isPast && <span className="badge badge-free">Livre</span>}
+          {!bk && !isPast && !isSlotAvailable(dateStr, slotMin) && <span className="badge badge-busy">Bloqueado</span>}
+          {!bk && !isPast && isSlotAvailable(dateStr, slotMin) && <span className="badge badge-free">Livre</span>}
         </div>
       )
     })
