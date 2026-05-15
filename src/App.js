@@ -173,9 +173,9 @@ export default function App() {
       if (bk.player1_id !== userId && bk.player2_id !== userId) return false
       const [y, mo, d] = bk.date.split('-').map(Number)
       const slotNum = parseInt(bk.slot)
-      const endH = Math.floor((slotNum + SLOT_MIN) / 60)
-      const endMn = (slotNum + SLOT_MIN) % 60
-      return new Date(y, mo - 1, d, endH, endMn) > now
+      const startH = Math.floor(slotNum / 60)
+      const startMn = slotNum % 60
+      return new Date(y, mo - 1, d, startH, startMn) > now
     })
   }
 
