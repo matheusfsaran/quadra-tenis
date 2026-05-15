@@ -172,8 +172,9 @@ export default function App() {
     return bookings.find(bk => {
       if (bk.player1_id !== userId && bk.player2_id !== userId) return false
       const [y, mo, d] = bk.date.split('-').map(Number)
-      const endH = Math.floor((bk.slot + SLOT_MIN) / 60)
-      const endMn = (bk.slot + SLOT_MIN) % 60
+      const slotNum = parseInt(bk.slot)
+      const endH = Math.floor((slotNum + SLOT_MIN) / 60)
+      const endMn = (slotNum + SLOT_MIN) % 60
       return new Date(y, mo - 1, d, endH, endMn) > now
     })
   }
